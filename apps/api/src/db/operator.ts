@@ -23,11 +23,24 @@ export interface OperatorDatabase {
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
+// A dotted-quad octet in canonical decimal: 0-255, no leading zero, no sign, no hex.
+const OCTET = /^(?:0|[1-9]\d{0,2})$/;
+
+/**
+ * True for a literal IPv4 address in 127.0.0.0/8, in canonical dotted-quad form. postgres:// URLs are not "special"
+ * in the WHATWG URL parser, so it does not normalise the host: `127.foo.example.com` (a DNS name that can resolve
+ * anywhere) and malformed forms such as `127.999.1.1`, `127.1` or `127.0.0.01` reach here unchanged and are refused.
+ */
+export function isIPv4Loopback(hostname: string): boolean {
+  const octets = hostname.split('.');
+  return octets.length === 4 && octets.every((octet) => OCTET.test(octet) && Number(octet) <= 255) && octets[0] === '127';
+}
+
 /** True when the URL's host is this machine (a local docker compose or CI database). */
 export function isLoopbackDatabase(url: string): boolean {
   try {
     const { hostname } = new URL(url);
-    return LOOPBACK_HOSTS.has(hostname) || hostname.startsWith('127.');
+    return LOOPBACK_HOSTS.has(hostname) || isIPv4Loopback(hostname);
   } catch {
     return false;
   }

@@ -208,4 +208,50 @@ describe.skipIf(!adminUrl || preexistingGroup)('deployment on a real Postgres se
       await asLogin.close();
     }
   }, 30_000);
+
+  // Last: it changes the schema, and puts it back afterwards.
+  it('this release keeps restarting on a database migrated for the next one that added a table the API writes to', async () => {
+    const owner = createPgDb(createPgPool(urlFor(OWNER, OWNER_PASSWORD)));
+    const start = async (env: Record<string, string>) => {
+      const port = await freePort();
+      const server = run('src/server.ts', [], { NODE_ENV: 'production', DATABASE_URL: urlFor(LOGIN, LOGIN_PASSWORD), HOST: '127.0.0.1', PORT: String(port), ...env }, (o) =>
+        o.includes('Server listening'),
+      );
+      return { port, server };
+    };
+    try {
+      // What the next release's `pnpm db:migrate` leaves behind: a newer migration, its table, and the grants from
+      // the next release's privilege map.
+      await owner.exec(`CREATE TABLE next_feature (id bigserial PRIMARY KEY, note text NOT NULL);
+                        INSERT INTO schema_migrations (version, name, checksum) VALUES ('9001', 'next_feature', 'next-release');
+                        GRANT SELECT, INSERT, UPDATE ON next_feature TO ${RUNTIME_ROLE};
+                        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${RUNTIME_ROLE}`);
+
+      const { port, server } = await start({});
+      await Promise.race([server.ready, server.done.then((r) => Promise.reject(new Error(`exited early: ${r.output}`)))]);
+      const ready = await fetch(`http://127.0.0.1:${port}/ready`);
+      expect([ready.status, await ready.json()]).toEqual([200, { status: 'ready', checks: { postgres: 'ok' } }]);
+      server.kill('SIGTERM');
+      const exit = await server.done;
+      expect(exit.code).toBe(0);
+      expect(exit.output).toContain('database is migrated for a later release (9001)');
+      expect(exit.output).not.toMatch(/Refusing to start|not least-privilege/);
+
+      // This release's operator CLI will not touch the newer schema (so it cannot strip the next release's grants).
+      const migrateRun = await cli('migrate', ownerEnv());
+      expect(migrateRun.code).toBe(1);
+      expect(migrateRun.output).toContain('Applied migration 9001 is missing locally');
+
+      // A table this release knows is still held to its own privilege map.
+      await owner.exec(`GRANT DELETE ON audit_log TO ${RUNTIME_ROLE}`);
+      const refused = await (await start({})).server.done;
+      expect(refused.code).toBe(1);
+      expect(refused.output).toContain(`Refusing to start: ${LOGIN} has DELETE on audit_log, beyond least privilege`);
+      expect(refused.output).not.toContain('next_feature');
+      expect(leaksNoSecret(exit.output + migrateRun.output + refused.output)).toBe(true);
+    } finally {
+      await owner.exec(`REVOKE DELETE ON audit_log FROM ${RUNTIME_ROLE}; DROP TABLE IF EXISTS next_feature; DELETE FROM schema_migrations WHERE version = '9001'`);
+      await owner.close();
+    }
+  }, 90_000);
 });

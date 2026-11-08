@@ -3,13 +3,14 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ApiConfigError, loadApiConfig, PROVISIONING_VARIABLES } from '../src/config.js';
 import type { Db, Queryable } from '../src/db/db.js';
-import { loadMigrations, migrate, migrationStatus, migrationStatusProblems, MIGRATIONS_DIR, type Migration } from '../src/db/migrate.js';
-import { isLoopbackDatabase, OperatorConfigError, resolveOperatorDatabase, resolveRuntimeLogin, seedRefusal, urlForLogin } from '../src/db/operator.js';
+import { checksum, loadMigrations, migrate, migrationStatus, migrationStatusProblems, MIGRATIONS_DIR, type Migration } from '../src/db/migrate.js';
+import { isIPv4Loopback, isLoopbackDatabase, OperatorConfigError, resolveOperatorDatabase, resolveRuntimeLogin, seedRefusal, urlForLogin } from '../src/db/operator.js';
 import {
   applyRuntimeGrants,
   DEFAULT_APP_LOGIN,
   provisioningPrivilegeProblem,
   provisionRuntimeRole,
+  RELEASE_GRANTABLE_PRIVILEGES,
   RoleProvisioningError,
   roleExists,
   RUNTIME_ROLE,
@@ -106,11 +107,27 @@ describe('operator configuration (pnpm db:*)', () => {
     ['127.0.0.1:5432/m', true],
     ['localhost/m', true],
     ['127.0.0.2:5432/m', true],
+    ['127.255.255.255:5432/m', true],
     ['[::1]:5432/m', true],
     ['db.example.invalid/m', false],
     ['dpg-abc.singapore-postgres.render.com/m', false],
+    // A host name that only starts with 127. is resolved by DNS, so it can be anywhere.
+    ['127.foo.example.com:5432/m', false],
+    ['127.0.0.1.example.com/m', false],
+    // Not a valid dotted-quad address: treated as remote (the safe direction: refused outside production).
+    ['127.999.1.1/m', false],
+    ['127.0.0/m', false],
+    ['127.0.0.01/m', false],
+    ['128.0.0.1/m', false],
   ])('treats %s as loopback: %s', (rest, loopback) => {
     expect(isLoopbackDatabase(pgUrl('u', 'p', rest))).toBe(loopback);
+  });
+
+  it('recognises only canonical 127.0.0.0/8 addresses as IPv4 loopback', () => {
+    for (const host of ['127.0.0.1', '127.0.0.2', '127.255.255.255', '127.0.0.0']) expect(isIPv4Loopback(host), host).toBe(true);
+    for (const host of ['127.foo.example.com', '127.0.0.1.example.com', '127.999.1.1', '127.1', '127.0.0', '127.0.0.01', '0x7f.0.0.1', '127.0.0.-1', '127.0.0.1 ', '', 'localhost', '::1', '128.0.0.1', '10.0.0.1']) {
+      expect(isIPv4Loopback(host), host).toBe(false);
+    }
   });
 
   it('rejects non-postgres URLs without printing them', () => {
@@ -232,6 +249,13 @@ describe('least-privilege runtime role', () => {
       .flatMap((file) => [...readFileSync(join(MIGRATIONS_DIR, file), 'utf8').matchAll(/CREATE TABLE (?:IF NOT EXISTS )?(\w+)/gi)].map((m) => m[1]));
     for (const table of created) expect(Object.keys(RUNTIME_TABLE_PRIVILEGES), table).toContain(table);
     expect(runtimePrivilegesFor('not_a_listed_table')).toEqual(['SELECT']);
+    // Object.prototype names are not listed tables (they would otherwise return a function, not a privilege list).
+    for (const name of ['constructor', 'toString', '__proto__']) expect(runtimePrivilegesFor(name), name).toEqual(['SELECT']);
+    // A later release's tables are tolerated up to RELEASE_GRANTABLE_PRIVILEGES on an ahead database, so no table
+    // may ever need more (a release that did would also take the previous release down on restart).
+    for (const [table, privileges] of Object.entries(RUNTIME_TABLE_PRIVILEGES)) {
+      for (const privilege of privileges) expect(RELEASE_GRANTABLE_PRIVILEGES.has(privilege), `${table}: ${privilege}`).toBe(true);
+    }
   });
 
   it('formats SCRAM verifiers and rejects weak or unusual passwords', () => {
@@ -438,6 +462,103 @@ describe('checkDatabaseAtStartup (never serve an incompatible schema or a privil
     expect(await checkDatabaseAtStartup(db, { ...options(true), migrations: migrations.slice(0, -1) })).toEqual({ accepted: [] });
     expect(warnings).toEqual([`database is migrated for a later release (${migrations.at(-1)?.version}); serving with this release until it is deployed`]);
     await db.query('RESET ROLE');
+  });
+
+  describe('a release restarting on a database migrated for the next one (release N on N+1\'s schema)', () => {
+    // Release N+1's migration, as release N sees it: a version newer than all of N's. N+1's `pnpm db:migrate` then
+    // re-applies grants from ITS privilege map; the GRANT statements below stand in for that step.
+    const nextRelease = (sql: string, version = '9001'): Migration => ({ version, name: 'next_release', sql, checksum: checksum(sql) });
+    const releaseN = () => ({ ...options(true), migrations });
+    const aheadWarning = (version = '9001') => `database is migrated for a later release (${version}); serving with this release until it is deployed`;
+
+    async function migrateForNextRelease(sql: string, grants = ''): Promise<void> {
+      await migrate(db, migrations);
+      await provisionRuntimeRole(db, { password: PASSWORD });
+      await migrate(db, [...migrations, nextRelease(sql)]);
+      if (grants !== '') await db.exec(grants);
+    }
+    const asApp = async <T>(fn: () => Promise<T>): Promise<T> => {
+      await db.query(`SET ROLE ${DEFAULT_APP_LOGIN}`);
+      try {
+        return await fn();
+      } finally {
+        await db.query('RESET ROLE');
+      }
+    };
+
+    it('starts when N+1 added a table and granted the runtime role INSERT and UPDATE on it (regression)', async () => {
+      await migrateForNextRelease(
+        'CREATE TABLE next_feature (id bigserial PRIMARY KEY, note text NOT NULL)',
+        `GRANT SELECT, INSERT, UPDATE ON next_feature TO ${RUNTIME_ROLE}; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${RUNTIME_ROLE}`,
+      );
+      // Without knowing the database is ahead, release N's policy still treats the table as unlisted (read-only):
+      // the check is narrowed only for the ahead case, not switched off.
+      expect(await asApp(() => runtimeRoleProblems(db))).toEqual([`${DEFAULT_APP_LOGIN} has INSERT, UPDATE on next_feature, beyond least privilege`]);
+      expect(await asApp(() => checkDatabaseAtStartup(db, releaseN()))).toEqual({ accepted: [] });
+      expect(warnings).toEqual([aheadWarning()]);
+    });
+
+    it('starts when N+1 added a table with DELETE, or with no grant at all, or only SELECT', async () => {
+      await migrateForNextRelease(
+        'CREATE TABLE next_a (id int PRIMARY KEY); CREATE TABLE next_b (id int PRIMARY KEY); CREATE TABLE next_c (id int PRIMARY KEY)',
+        `GRANT SELECT, INSERT, UPDATE, DELETE ON next_a TO ${RUNTIME_ROLE}; GRANT SELECT ON next_c TO ${RUNTIME_ROLE}`,
+      );
+      expect(await asApp(() => checkDatabaseAtStartup(db, releaseN()))).toEqual({ accepted: [] });
+      expect(warnings).toEqual([aheadWarning()]);
+    });
+
+    it('starts when N+1 added no table', async () => {
+      await migrateForNextRelease("COMMENT ON TABLE mandate IS 'changed by the next release'");
+      expect(await asApp(() => checkDatabaseAtStartup(db, releaseN()))).toEqual({ accepted: [] });
+      expect(warnings).toEqual([aheadWarning()]);
+    });
+
+    it('still refuses excess privileges on a table release N knows', async () => {
+      await migrateForNextRelease(
+        'CREATE TABLE next_feature (id int PRIMARY KEY)',
+        `GRANT SELECT, INSERT, UPDATE ON next_feature TO ${RUNTIME_ROLE}; GRANT DELETE ON audit_log TO ${RUNTIME_ROLE}; GRANT UPDATE ON schema_migrations TO ${RUNTIME_ROLE}`,
+      );
+      const error = await asApp(() => checkDatabaseAtStartup(db, releaseN()).catch((e: unknown) => e));
+      expect(error).toBeInstanceOf(DatabaseNotReadyError);
+      expect((error as DatabaseNotReadyError).problems).toEqual([
+        `${DEFAULT_APP_LOGIN} has DELETE on audit_log, beyond least privilege`,
+        `${DEFAULT_APP_LOGIN} has UPDATE on schema_migrations, beyond least privilege`,
+        'DATABASE_URL must use the restricted login created by `pnpm db:roles` (docs/deployment-render.md)',
+      ]);
+    });
+
+    it('still refuses a known table release N cannot read', async () => {
+      await migrateForNextRelease('CREATE TABLE next_feature (id int PRIMARY KEY)', `REVOKE SELECT ON shipment FROM ${RUNTIME_ROLE}`);
+      await expect(asApp(() => checkDatabaseAtStartup(db, releaseN()))).rejects.toThrow(/cannot read shipment/);
+    });
+
+    it('still refuses privileges no release grants (TRUNCATE, REFERENCES, TRIGGER), even on a table release N does not know', async () => {
+      await migrateForNextRelease(
+        'CREATE TABLE next_feature (id int PRIMARY KEY)',
+        `GRANT SELECT, INSERT, TRUNCATE, REFERENCES, TRIGGER ON next_feature TO ${RUNTIME_ROLE}`,
+      );
+      await expect(asApp(() => checkDatabaseAtStartup(db, releaseN()))).rejects.toThrow(
+        `${DEFAULT_APP_LOGIN} has TRUNCATE, REFERENCES, TRIGGER on next_feature, beyond least privilege`,
+      );
+    });
+
+    it('still refuses write grants on a table no migration of release N created when the database is NOT ahead', async () => {
+      await migrate(db, migrations);
+      await provisionRuntimeRole(db, { password: PASSWORD });
+      await db.exec(`CREATE TABLE stray (id int PRIMARY KEY); GRANT SELECT, INSERT, UPDATE ON stray TO ${RUNTIME_ROLE}`);
+      await expect(asApp(() => checkDatabaseAtStartup(db, releaseN()))).rejects.toThrow(`${DEFAULT_APP_LOGIN} has INSERT, UPDATE on stray, beyond least privilege`);
+      expect(warnings).toEqual([]);
+    });
+
+    it('a database behind release N is still refused, and the same version still starts cleanly', async () => {
+      await migrate(db, migrations.slice(0, -1));
+      await provisionRuntimeRole(db, { password: PASSWORD });
+      await expect(asApp(() => checkDatabaseAtStartup(db, releaseN()))).rejects.toThrow(/pending migrations: /);
+      await migrate(db, migrations);
+      await applyRuntimeGrants(db); // what `pnpm db:migrate` does after migrating
+      expect(await asApp(() => checkDatabaseAtStartup(db, releaseN()))).toEqual({ accepted: [] });
+      expect(warnings).toEqual([]);
+    });
   });
 
   it('refuses a database whose history differs from the code (a foreign or edited migration)', async () => {

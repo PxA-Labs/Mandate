@@ -48,7 +48,9 @@ export interface StartupCheckResult {
  *      AHEAD (migrated for a later release, every extra version newer than this code's) is accepted with a warning:
  *      migrations are forward-only and backward compatible, and refusing it would take the running release down
  *      on its next restart (a Free instance restarts after every idle spin-down) while the next one is deployed.
- *   2. The login must be least-privilege (runtimeRoleProblems). In production a finding refuses the start unless
+ *   2. The login must be least-privilege (runtimeRoleProblems). On a database that is ahead, tables only the later
+ *      release knows may hold that release's grants (up to SELECT/INSERT/UPDATE/DELETE); every table this release
+ *      knows is checked as usual. In production a finding refuses the start unless
  *      MANDATE_DB_ALLOW_PRIVILEGED_RUNTIME=1; elsewhere (the local compose superuser) findings are warnings.
  * Read-only: catalog and schema_migrations reads, no locks.
  */
@@ -62,7 +64,7 @@ export async function checkDatabaseAtStartup(db: Queryable, options: StartupChec
     schemaProblems = migrationStatusProblems(status, { allowAhead: true });
     ahead = status.ahead;
     historyDiffers = status.edited.length > 0 || status.unknown.length > 0;
-    roleProblems = schemaProblems.length > 0 ? [] : await runtimeRoleProblems(db);
+    roleProblems = schemaProblems.length > 0 ? [] : await runtimeRoleProblems(db, undefined, { databaseAhead: ahead.length > 0 });
   } catch (error) {
     throw new DatabaseNotReadyError([`could not check the database: ${safeDatabaseError(error)}`]);
   }

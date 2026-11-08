@@ -47,7 +47,7 @@ Why this split matters:
   - with `NODE_ENV=production`: `DATABASE_URL` is missing; `MIGRATION_DATABASE_URL` or `MANDATE_APP_DB_PASSWORD` is set on the service; or the login is not least-privilege (superuser, owner, `CREATEROLE`, extra grants, …). The last one alone can be overridden with `MANDATE_DB_ALLOW_PRIVILEGED_RUNTIME=1`, logged at every start ([troubleshooting](#14-troubleshooting)).
 - Error messages name variables, roles, tables and migration versions, never values or passwords.
 
-The checks live in `apps/api/src/db/startup.ts` (`checkDatabaseAtStartup`) and `apps/api/src/db/roles.ts` (`runtimeRoleProblems`, `provisionRuntimeRole`). `runtimeRoleProblems` checks the login's and its groups' attributes, memberships and ADMIN OPTION, its own grants and saved settings, ownership, every table and column privilege (including `TRIGGER`, `REFERENCES`, `MAINTAIN`), and `CREATE` on schemas and the database.
+The checks live in `apps/api/src/db/startup.ts` (`checkDatabaseAtStartup`) and `apps/api/src/db/roles.ts` (`runtimeRoleProblems`, `provisionRuntimeRole`). `runtimeRoleProblems` checks the login's and its groups' attributes, memberships and ADMIN OPTION, its own grants and saved settings, ownership, every table and column privilege (including `TRIGGER`, `REFERENCES`, `MAINTAIN`), and `CREATE` on schemas and the database. On a database migrated for a later release, tables only that release knows are exempt from the excess-privilege and readability checks, up to `SELECT`/`INSERT`/`UPDATE`/`DELETE` ([step 8](#8-run-database-migrations-safely)); every table this release knows is checked as usual.
 
 Known limits of the model:
 
@@ -161,8 +161,11 @@ psql "$MIGRATION_DATABASE_URL" -c "SELECT current_user, rolsuper AS is_superuser
 ```
 
 `can_create_roles` must be `t` for `pnpm db:roles`. If it is `f`, **stop**: do not try to obtain superuser or any other privilege, and do not run the API as the owner by default. Agree on one of these with the team (Purvansh owns #14):
-1. ask Render support whether the owner can be given `CREATEROLE`, or whether they can create `mandate_runtime` and `mandate_app` for you (then run `pnpm db:roles`, which only needs ADMIN OPTION on existing roles);
-2. as a recorded, temporary accepted risk only, the emergency override in [troubleshooting](#14-troubleshooting).
+1. ask Render support whether the owner can be given `CREATEROLE` (then continue as below);
+2. or ask whoever **does** have `CREATEROLE` on the instance (Render support) to create the two roles once: `mandate_runtime` (`NOLOGIN`, no other attributes) and `mandate_app` (`LOGIN`, a password you give them over a private channel, member of `mandate_runtime` only). Then run `pnpm db:migrate`, not `pnpm db:roles`: as the tables' owner it re-applies `mandate_runtime`'s grants without needing `CREATEROLE` (it prints `Re-applied mandate_runtime grants on N tables`). `pnpm db:roles` itself always needs `CREATEROLE`, because it sets the login's password and attributes. The API's start-up check then verifies the login;
+3. as a recorded, temporary accepted risk only, and with the team's explicit approval, the emergency override in [troubleshooting](#14-troubleshooting).
+
+Provisioning credentials and runtime credentials are different logins. The **owner** (`MIGRATION_DATABASE_URL`) runs migrations and provisioning from an operator's machine and never goes on `mandate-api`. The **runtime login** `mandate_app` (`DATABASE_URL` on `mandate-api`) has no attributes, owns nothing, and holds only the table privileges in `RUNTIME_TABLE_PRIVILEGES`. A missing `CREATEROLE` is a provisioning problem; it is solved once, at provisioning, and never by giving the runtime more privilege.
 
 Then:
 
@@ -220,6 +223,11 @@ Then `mandate-db` → **Access Control** → delete your `/32` entry. Do this ev
 3. **Deploy again yourself**: `mandate-api` → **Manual Deploy → Deploy latest commit**. Render does not retry the failed auto-deploy.
 
 This works only if every migration is **backward compatible** with the release before it: add tables, add nullable columns or columns with defaults, add indexes. Renaming or dropping a column or table, or tightening a constraint that the old code would violate, needs two releases (stop using it, then remove it).
+
+The same rule applies to the API's **grants** (`RUNTIME_TABLE_PRIVILEGES` in `apps/api/src/db/roles.ts`), because the older release re-checks its login at every start:
+
+- A **new table** may get any of `SELECT`, `INSERT`, `UPDATE`, `DELETE`. On a database that is ahead, the older release ignores tables it does not know, up to those four privileges, and still checks every table it does know. `TRUNCATE`, `REFERENCES`, `TRIGGER` and `MAINTAIN` are never granted and are always refused.
+- **Widening** the grants on a table the older release already knows (for example adding `DELETE` on `cart`) is not backward compatible: after `pnpm db:migrate` the older release refuses to restart with `has DELETE on cart, beyond least privilege`. Ship it in two releases: first a release whose `RUNTIME_TABLE_PRIVILEGES` lists the new privilege without using it, deployed **before** the migration that grants it; then the release that uses it.
 
 ## 9. Deploy the API
 
@@ -315,7 +323,8 @@ The Postman collection in [`postman/`](../postman) has every request; set `baseU
 | `Refusing to start: … cannot read <table>; run pnpm db:roles` | A new table without grants | `pnpm db:migrate` (re-applies grants) or `pnpm db:roles` |
 | `Refusing to start: could not check the database: … ECONNREFUSED / ENOTFOUND / timeout` | Wrong host, the external URL used on Render, different region, or the database is down/expired | Use the **internal** URL; check `mandate-db` status and region |
 | `password authentication failed for user "mandate_app"` | Wrong or stale password in `DATABASE_URL` | Re-run `pnpm db:roles` with a new password and update `DATABASE_URL` |
-| `pnpm db:roles`: `role mandate lacks CREATEROLE …` | The database owner cannot create roles on this database | Ask Render support for `CREATEROLE`, or use the emergency override below |
+| `pnpm db:roles`: `role mandate lacks CREATEROLE …` | The database owner cannot create roles on this database | [Step 8](#8-run-database-migrations-safely), options 1–2; the emergency override below only as a last resort |
+| `Refusing to start: … has DELETE on <table>, beyond least privilege` right after `pnpm db:migrate` | A migration widened the grants on a table the running release knows | Deploy the release that lists the privilege; next time ship it in two releases ([step 8](#8-run-database-migrations-safely)) |
 | Operator command: `ECONNREFUSED`, timeout, or `no pg_hba.conf entry` | Your IP is not in the allow list, or you used the internal URL | [Step 7](#7-set-up-migration-credentials): add `<IP>/32`, use the **external** URL |
 | Operator command: SSL / certificate error | `sslmode` missing or certificate verification failing | Use the external URL exactly as shown, with `?sslmode=require` |
 | `MIGRATION_DATABASE_URL is required with NODE_ENV=production` | Operator shell not prepared | `read -rs MIGRATION_DATABASE_URL && export MIGRATION_DATABASE_URL` |

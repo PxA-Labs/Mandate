@@ -54,8 +54,20 @@ export const RUNTIME_TABLE_PRIVILEGES: Readonly<Record<string, readonly string[]
 };
 export const UNLISTED_TABLE_PRIVILEGES = ['SELECT'] as const;
 
+/**
+ * The only table privileges any release grants the runtime role (a test checks RUNTIME_TABLE_PRIVILEGES stays within
+ * them). On a database migrated for a later release, a table this release does not list may hold these and nothing
+ * else: see runtimeRoleProblems. TRUNCATE, REFERENCES, TRIGGER and MAINTAIN are never granted, so they are always reported.
+ */
+export const RELEASE_GRANTABLE_PRIVILEGES: ReadonlySet<string> = new Set(['SELECT', 'INSERT', 'UPDATE', 'DELETE']);
+
+/** Whether this release lists the table (own keys only: a table named e.g. `constructor` is not "listed"). */
+export function isListedTable(table: string): boolean {
+  return Object.hasOwn(RUNTIME_TABLE_PRIVILEGES, table);
+}
+
 export function runtimePrivilegesFor(table: string): readonly string[] {
-  return RUNTIME_TABLE_PRIVILEGES[table] ?? UNLISTED_TABLE_PRIVILEGES;
+  return isListedTable(table) ? (RUNTIME_TABLE_PRIVILEGES[table] ?? UNLISTED_TABLE_PRIVILEGES) : UNLISTED_TABLE_PRIVILEGES;
 }
 
 /**
@@ -323,8 +335,14 @@ const CHECKED_PRIVILEGES = ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCE
  * holds no table or column privilege beyond RUNTIME_TABLE_PRIVILEGES (including TRIGGER, REFERENCES, MAINTAIN);
  * cannot create schemas in this database or objects in any schema. Messages name roles and tables, never credentials.
  * Not covered (documented): TEMP and function EXECUTE, which PostgreSQL grants to PUBLIC by default.
+ *
+ * `databaseAhead`: the database is migrated for a later release (startup.ts). Tables this release does not list were
+ * then created by that release, which granted their access from ITS RUNTIME_TABLE_PRIVILEGES when it migrated. This
+ * release never uses them, so for those tables only, SELECT may be missing and SELECT/INSERT/UPDATE/DELETE are not
+ * reported (RELEASE_GRANTABLE_PRIVILEGES); without this, release N would refuse to restart once N+1 is migrated.
+ * Tables this release lists are checked exactly as always, and so is every table when the database is not ahead.
  */
-export async function runtimeRoleProblems(q: Queryable, group = RUNTIME_ROLE): Promise<string[]> {
+export async function runtimeRoleProblems(q: Queryable, group = RUNTIME_ROLE, options: { databaseAhead?: boolean } = {}): Promise<string[]> {
   const { rows } = await q.query<{ role: string; superuser: boolean; createrole: boolean; createdb: boolean; replication: boolean; bypassrls: boolean }>(
     `SELECT rolname AS role, rolsuper AS superuser, rolcreaterole AS createrole, rolcreatedb AS createdb,
             rolreplication AS replication, rolbypassrls AS bypassrls
@@ -364,10 +382,12 @@ export async function runtimeRoleProblems(q: Queryable, group = RUNTIME_ROLE): P
   if (owned > 0) problems.push(`${me.role} owns (or can act as the owner of) ${owned} objects in this database, so it could disable triggers or change the schema`);
 
   const { rows: tables } = await q.query<{ table: string } & Record<(typeof CHECKED_PRIVILEGES)[number] | 'SELECT', boolean>>(TABLE_PRIVILEGE_CHECK);
-  const unreadable = tables.filter((t) => !t.SELECT).map((t) => t.table);
+  // A table only a later release knows (and uses): see `databaseAhead` above.
+  const laterReleaseTable = (table: string) => options.databaseAhead === true && !isListedTable(table);
+  const unreadable = tables.filter((t) => !t.SELECT && !laterReleaseTable(t.table)).map((t) => t.table);
   if (unreadable.length > 0) problems.push(`${me.role} cannot read ${unreadable.join(', ')}; run pnpm db:roles (or pnpm db:migrate) to re-apply grants`);
   for (const t of tables) {
-    const allowed = new Set(runtimePrivilegesFor(t.table));
+    const allowed = laterReleaseTable(t.table) ? RELEASE_GRANTABLE_PRIVILEGES : new Set(runtimePrivilegesFor(t.table));
     const extra = CHECKED_PRIVILEGES.filter((privilege) => t[privilege] && !allowed.has(privilege));
     if (extra.length > 0) problems.push(`${me.role} has ${extra.join(', ')} on ${t.table}, beyond least privilege`);
   }
