@@ -1,22 +1,50 @@
-# Mandate
+<p align="center">
+  <img src="docs/assets/logo.svg" width="128" height="128" alt="Mandate logo: a shield with a check mark">
+</p>
 
-[![CI](https://github.com/PxA-Labs/Mandate/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/PxA-Labs/Mandate/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/PxA-Labs/Mandate/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/PxA-Labs/Mandate/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/PxA-Labs/Mandate/badge)](https://securityscorecards.dev/viewer/?uri=github.com/PxA-Labs/Mandate)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Conventional Commits](https://img.shields.io/badge/Conventional_Commits-1.0.0-fe5196?logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
-[![Contributor Covenant](https://img.shields.io/badge/Contributor_Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
+<h1 align="center">Mandate</h1>
 
-[![PayPal AI Hackathon](https://img.shields.io/badge/PayPal_AI_Hackathon-2026-003087?logo=paypal&logoColor=white)](https://devpost.com/)
-[![PayPal Sandbox](https://img.shields.io/badge/PayPal-Orders_v2_sandbox-00457C?logo=paypal&logoColor=white)](docs/spike-results.md)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.base.json)
-[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A522.12-5FA04E?logo=nodedotjs&logoColor=white)](package.json)
-[![pnpm](https://img.shields.io/badge/pnpm-11-F69220?logo=pnpm&logoColor=white)](pnpm-workspace.yaml)
-[![Fastify](https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white)](apps/api)
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](apps/web)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-source_of_truth-4169E1?logo=postgresql&logoColor=white)](docs/er-diagram.md)
-[![Vitest](https://img.shields.io/badge/tested_with-Vitest-6E9F18?logo=vitest&logoColor=white)](vitest.config.ts)
-[![Render](https://img.shields.io/badge/deployed_on-Render-46E3B7?logo=render&logoColor=black)](render.yaml)
+<p align="center"><b>Spending guardrails for AI agents.</b><br>The LLM proposes. Code decides. Every decision is audited.</p>
+
+<p align="center">
+  <!-- Build and security -->
+  <a href="https://github.com/PxA-Labs/Mandate/actions/workflows/ci.yml"><img src="https://github.com/PxA-Labs/Mandate/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/PxA-Labs/Mandate/actions/workflows/codeql.yml"><img src="https://github.com/PxA-Labs/Mandate/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL"></a>
+  <a href="https://securityscorecards.dev/viewer/?uri=github.com/PxA-Labs/Mandate"><img src="https://api.securityscorecards.dev/projects/github.com/PxA-Labs/Mandate/badge" alt="OpenSSF Scorecard"></a>
+  <a href="SECURITY.md"><img src="https://img.shields.io/badge/security-policy-2ea44f?logo=githubactions&logoColor=white" alt="Security policy"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-blue" alt="License: Apache-2.0"></a>
+</p>
+
+<p align="center">
+  <!-- Stack -->
+  <a href="tsconfig.base.json"><img src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white" alt="TypeScript"></a>
+  <a href="package.json"><img src="https://img.shields.io/badge/Node.js-%E2%89%A522.12-5FA04E?logo=nodedotjs&logoColor=white" alt="Node.js"></a>
+  <a href="pnpm-workspace.yaml"><img src="https://img.shields.io/badge/pnpm-11-F69220?logo=pnpm&logoColor=white" alt="pnpm"></a>
+  <a href="apps/api"><img src="https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white" alt="Fastify"></a>
+  <a href="apps/web"><img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React"></a>
+  <a href="docs/er-diagram.md"><img src="https://img.shields.io/badge/PostgreSQL-source_of_truth-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL"></a>
+  <a href="packages/shared"><img src="https://img.shields.io/badge/Zod-schemas-3E67B1?logo=zod&logoColor=white" alt="Zod"></a>
+  <a href="vitest.config.ts"><img src="https://img.shields.io/badge/tested_with-Vitest-6E9F18?logo=vitest&logoColor=white" alt="Vitest"></a>
+</p>
+
+<p align="center">
+  <!-- Integrations -->
+  <a href="docs/spike-results.md"><img src="https://img.shields.io/badge/PayPal-Orders_v2_sandbox-003087?logo=paypal&logoColor=white" alt="PayPal Orders v2 sandbox"></a>
+  <a href="docs/zapier.md"><img src="https://img.shields.io/badge/Zapier-human_approvals-FF4F00?logo=zapier&logoColor=white" alt="Zapier human approvals"></a>
+  <a href="docs/llm-layer.md"><img src="https://img.shields.io/badge/NVIDIA-Mistral_Large_4-76B900?logo=nvidia&logoColor=white" alt="LLM: Mistral Large 4 on NVIDIA"></a>
+  <a href="apps/web"><img src="https://img.shields.io/badge/AG_Grid-Community-0F3D5C" alt="AG Grid Community"></a>
+  <a href="render.yaml"><img src="https://img.shields.io/badge/Render-deployed-46E3B7?logo=render&logoColor=black" alt="Deployed on Render"></a>
+</p>
+
+<p align="center">
+  <!-- Community -->
+  <a href="https://devpost.com/"><img src="https://img.shields.io/badge/PayPal_AI_Hackathon-2026-003087?logo=devpost&logoColor=white" alt="PayPal AI Hackathon 2026"></a>
+  <a href="https://www.conventionalcommits.org/"><img src="https://img.shields.io/badge/Conventional_Commits-1.0.0-fe5196?logo=conventionalcommits&logoColor=white" alt="Conventional Commits"></a>
+  <a href="CODE_OF_CONDUCT.md"><img src="https://img.shields.io/badge/Contributor_Covenant-2.1-4baaaa" alt="Contributor Covenant 2.1"></a>
+  <a href="https://github.com/PxA-Labs/Mandate/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome"></a>
+</p>
+
+---
 
 **Spending guardrails for AI agents.** A team sets the rules; an AI agent shops inside them; deterministic code — not the model — decides what gets paid for.
 
