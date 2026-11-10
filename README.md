@@ -374,18 +374,9 @@ Open questions. None of these may be stated as fact until tested.
 
 ## Contributing
 
-| Step | Rule |
-|---|---|
-| 1. Fork | `origin` is your fork; `upstream` is the team repo |
-| 2. Branch | From `upstream/main`. Names: `type/short-topic` — `feat/`, `fix/`, `docs/`, `chore/`, `test/`, `eval/` |
-| 3. Commit | [Conventional Commits](https://www.conventionalcommits.org/): `feat(policy): block split purchases`. One logical change per commit |
-| 4. Check | Lint, typecheck and tests pass. No secrets. Docs updated if behavior changed. Policy changes ship with unit tests |
-| 5. PR | From your fork to upstream `main`. Body: summary, what changed, how tested, `VERIFY` items |
-| 6. Review | Never push to upstream, force-push, or merge without a teammate's review |
+Contributions are welcome. **[CONTRIBUTING.md](CONTRIBUTING.md)** covers setup, the hard rules, the branch and commit conventions, the checks to run before a PR, and what to add for policy, LLM, payment or migration changes.
 
-Everyone taking part agrees to the [Code of Conduct](CODE_OF_CONDUCT.md).
-
-Agent-assisted work must follow [CLAUDE.md](CLAUDE.md) — in particular the hard rules on LLM/payment separation, untrusted product text, integer minor units, idempotency, sandbox-only operation, and no secrets in git.
+In short: branch from `main`, use [Conventional Commits](https://www.conventionalcommits.org/), make sure lint, typecheck and tests pass, never commit secrets, and get a teammate's review before merging. Everyone taking part agrees to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Security
 
