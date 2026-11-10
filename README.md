@@ -34,6 +34,8 @@
   <a href="docs/llm-layer.md"><img src="https://img.shields.io/badge/NVIDIA-Mistral_Large_4-76B900?logo=nvidia&logoColor=white" alt="LLM: Mistral Large 4 on NVIDIA"></a>
   <a href="apps/web"><img src="https://img.shields.io/badge/AG_Grid-Community-0F3D5C" alt="AG Grid Community"></a>
   <a href="https://mandate-web-vo77.onrender.com"><img src="https://img.shields.io/badge/Render-live-46E3B7-46E3B7?logo=render&logoColor=black" alt="Deployed on Render"></a>
+  <a href="https://youtu.be/ZNQ4wUnclvk"><img src="https://img.shields.io/badge/YouTube-live_demo_2%3A49-FF0000?logo=youtube&logoColor=white" alt="Live demo on YouTube (2:49)"></a>
+  <a href="https://github.com/user-attachments/assets/51519db0-fec3-4775-88c2-04c4b5f27266"><img src="https://img.shields.io/badge/launch_video-1%3A31-17302C?logo=googlecast&logoColor=white" alt="Launch video (1:31)"></a>
 </p>
 
 <p align="center">
