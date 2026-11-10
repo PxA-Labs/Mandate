@@ -33,7 +33,7 @@
   <a href="docs/zapier.md"><img src="https://img.shields.io/badge/Zapier-human_approvals-FF4F00?logo=zapier&logoColor=white" alt="Zapier human approvals"></a>
   <a href="docs/llm-layer.md"><img src="https://img.shields.io/badge/NVIDIA-Mistral_Large_4-76B900?logo=nvidia&logoColor=white" alt="LLM: Mistral Large 4 on NVIDIA"></a>
   <a href="apps/web"><img src="https://img.shields.io/badge/AG_Grid-Community-0F3D5C" alt="AG Grid Community"></a>
-  <a href="render.yaml"><img src="https://img.shields.io/badge/Render-deployed-46E3B7?logo=render&logoColor=black" alt="Deployed on Render"></a>
+  <a href="https://mandate-web-vo77.onrender.com"><img src="https://img.shields.io/badge/Render-live-46E3B7-46E3B7?logo=render&logoColor=black" alt="Deployed on Render"></a>
 </p>
 
 <p align="center">
@@ -52,12 +52,12 @@ Entry for the **PayPal AI Hackathon** (Devpost). Deadline **Nov 12, 2026, 12:00 
 
 > **Labels used in this README.** `VERIFY` = we have not confirmed this yet. `HYPOTHESIS` = a guess about users or business that interviews must test. `TBD` = does not exist yet. We do not state results we have not measured.
 
-**Status (Nov 10):** the backend, the AI layer, the policy engine, the web app and the eval harness are built and tested in CI. Real PayPal sandbox payments were verified on 2026-11-06 with the spike script ([docs/spike-results.md](docs/spike-results.md)). A live structured LLM call was verified on 2026-11-08. The app is **deployed on Render**; the public URLs and the list of checks run against the deployment are being added (`VERIFY`). **Not yet done:** the live eval numbers. See [What works today](#what-works-today).
+**Status (Nov 10):** the backend, the AI layer, the policy engine, the web app and the eval harness are built and tested in CI. Real PayPal sandbox payments were verified on 2026-11-06 with the spike script ([docs/spike-results.md](docs/spike-results.md)). A live structured LLM call was verified on 2026-11-08. The app is **live on Render** ([web app](https://mandate-web-vo77.onrender.com) · [API](https://mandate-api-2j9m.onrender.com/health)). On 2026-11-09 the deployed app took a purchase end to end: the live LLM parsed the request, the policy engine returned `ALLOW`, and the PayPal sandbox order was captured with provider status `COMPLETED`. **Not yet done:** the live eval numbers. See [What works today](#what-works-today).
 
 | | Link |
 |---|---|
-| Live web app | `TBD`: URL being added |
-| Live API | `TBD`: URL being added |
+| Live web app | **[mandate-web-vo77.onrender.com](https://mandate-web-vo77.onrender.com)** |
+| Live API | [mandate-api-2j9m.onrender.com](https://mandate-api-2j9m.onrender.com/health) (`/health`, `/ready`) |
 | Demo video | `TBD` |
 
 **Contents:** [Problem](#the-problem) · [Solution](#the-solution) · [USP](#usp-we-measure-it) · [Architecture](#architecture-at-a-glance) · [Getting started](#getting-started) · [What works today](#what-works-today) · [Eval protocol](#eval-protocol) · [Contributing](#contributing) · [Security](#security)
@@ -229,11 +229,11 @@ pnpm eval --live                           # the real benchmark; needs the LLM s
 | Purchase flow with budget reservations, idempotency keys and an order state machine | Built; integration tests on real Postgres in CI |
 | LLM intent parser and ranker (no tools; fabricated ids and inflated quantities refused) | Built; tested with a fake model. One live structured call verified on NVIDIA with Mistral Large 4 (2026-11-08, `pnpm smoke:live`). The live eval run is still pending (#20) |
 | Catalog | **Offline fixture** with deliberately poisoned listings. Channel3 not integrated (`VERIFY`) |
-| PayPal: create order, capture, read order, webhook signature check, reconciliation | Built against the Orders v2 sandbox API; tested with fakes. **Live sandbox run recorded 2026-11-06** ([docs/spike-results.md](docs/spike-results.md)): a buyer-approved $5.00 order captured `COMPLETED`, and the saved wallet was then charged $5.00 with no buyer present (`COMPLETED`). Run from a laptop with the spike script, not yet through the deployed API (#14). The API uses buyer approval; the saved-wallet path is not wired in yet |
+| PayPal: create order, capture, read order, webhook signature check, reconciliation | Built against the Orders v2 sandbox API; tested with fakes. **Live sandbox run recorded 2026-11-06** ([docs/spike-results.md](docs/spike-results.md)): a buyer-approved $5.00 order captured `COMPLETED`, and the saved wallet was then charged $5.00 with no buyer present (`COMPLETED`). **Through the deployed API on 2026-11-09:** an `ALLOW`ed $23.00 cart was captured, provider status `COMPLETED`. The API uses buyer approval; the saved-wallet path is not wired in yet |
 | Approvals: single-use links, Zapier message, review page | Built; the Zap itself still has to be created ([docs/zapier.md](docs/zapier.md)) |
-| Web app: request, decision with every reason, mandate setup, dashboard, audit trail | Built; deployed on Render (URL being added) |
+| Web app: request, decision with every reason, mandate setup, dashboard, audit trail | Built; **[live on Render](https://mandate-web-vo77.onrender.com)** |
 | Benchmark: 31 benign requests, 26 attacks in 13 categories, half held out | Harness and suites built; **no live results yet**, so this README reports none |
-| Deployment | **Deployed on Render** from `render.yaml` (API, static web app, Postgres). Public URLs and the checks run against the deployment: `VERIFY` (#14) |
+| Deployment | **Live on Render** from `render.yaml`: [web app](https://mandate-web-vo77.onrender.com), [API](https://mandate-api-2j9m.onrender.com/health), Postgres. Checked 2026-11-10: `/health` and `/ready` (Postgres ok) return 200, the seeded mandate and dashboard summary load, and CORS allows the web origin |
 
 ## Tools used and how
 
@@ -241,12 +241,12 @@ Only what the code does today. Planned work is marked as such.
 
 | Tool | How Mandate uses it | Status |
 |---|---|---|
-| **PayPal** (REST Orders v2, sandbox) | `packages/payments` creates orders with `PayPal-Request-Id` idempotency keys, captures them for the exact approved amount, reads orders to reconcile unknown outcomes, and verifies webhook signatures. Only that package may call PayPal | Built. Live sandbox payments verified 2026-11-06 with the spike script; a payment through the deployed API: `VERIFY` (#14). Agent Toolkit / MCP not used |
+| **PayPal** (REST Orders v2, sandbox) | `packages/payments` creates orders with `PayPal-Request-Id` idempotency keys, captures them for the exact approved amount, reads orders to reconcile unknown outcomes, and verifies webhook signatures. Only that package may call PayPal | Built. Live sandbox payments verified with the spike script (2026-11-06) and through the deployed API (2026-11-09, captured `COMPLETED`). Agent Toolkit / MCP not used |
 | **NVIDIA API catalog** (`mistralai/mistral-large-4-1t-a52b`, OpenAI-compatible) | Intent parsing and ranking with strict JSON-schema output and no tools, over plain `fetch`; the naive and hardened eval baselines use tool calls, only inside `packages/evals` | One live structured call and a 4-call tool-use check verified; eval run pending (#20) |
 | **Anthropic Claude** (`@anthropic-ai/sdk`) | The original plan. The adapter is still in the code, tested with fakes | Never run live: no key |
 | **AG Grid Community** | The dashboard's requests table: filters, sorting, keyboard navigation | Built. "AG Studio" not used |
 | **Zapier** | Webhooks by Zapier Catch Hook receives approval requests and messages the approver | API side built; Zap to be created |
-| **Render** | Blueprint for the API, the static web app and Postgres | Deployed (URLs being added) |
+| **Render** | Blueprint for the API, the static web app and Postgres | [Live](https://mandate-web-vo77.onrender.com) |
 | **Postman** | Collection covering every API endpoint, in `postman/` | Built |
 | **Channel3** | Planned product search | Not integrated |
 | **Elastic, APIMatic** | Planned | Not used |
@@ -273,7 +273,7 @@ All five criteria carry equal weight. Technological Implementation is also the t
 
 | Criterion | What we must show | Evidence artifact |
 |---|---|---|
-| **Technological Implementation** (tie-break) | Real PayPal sandbox calls from deployed code; order state machine with idempotency; deterministic policy engine; webhook dedupe and reconciliation; durable approvals | Deployed demo URL · [docs/uml.md](docs/uml.md) state and sequence diagrams · `packages/policy` unit tests · CI green |
+| **Technological Implementation** (tie-break) | Real PayPal sandbox calls from deployed code; order state machine with idempotency; deterministic policy engine; webhook dedupe and reconciliation; durable approvals | [Live demo](https://mandate-web-vo77.onrender.com) · [docs/uml.md](docs/uml.md) state and sequence diagrams · `packages/policy` unit tests · CI green |
 | **Design** | One coherent flow (set mandate, request, decision, pay, track); every block shows a human-readable reason | Demo video walkthrough · AG Studio dashboard screens · reason codes in [docs/er-diagram.md](docs/er-diagram.md) |
 | **Potential Impact** | A named user group, interview evidence, and a quantified safety result | Interview summaries in this README · eval results in `packages/evals/results/` |
 | **Innovation / Idea** | Guardrail-first agent commerce: injection and structuring defenses outside the model, measured against two baselines | Three-configuration comparison table, populated after the eval run · [ADR 0004](docs/adr/0004-llm-has-no-tools-policy-in-code.md) |
