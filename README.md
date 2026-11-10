@@ -44,6 +44,12 @@
   <a href="https://github.com/PxA-Labs/Mandate/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome"></a>
 </p>
 
+<h3 align="center">🎬 Watch the launch video (1:31, narrated)</h3>
+
+https://github.com/user-attachments/assets/51519db0-fec3-4775-88c2-04c4b5f27266
+
+<p align="center"><sub>Your AI agent just got a credit card. The LLM proposes, code decides. If the player does not load, <a href="https://github.com/user-attachments/assets/51519db0-fec3-4775-88c2-04c4b5f27266">open the video directly</a>.<br>Music: Sascha Ende, <a href="https://ende.app/en">ende.app</a> (CC BY 4.0). Voice: Kokoro-82M.</sub></p>
+
 ---
 
 **Spending guardrails for AI agents.** A team sets the rules; an AI agent shops inside them; deterministic code — not the model — decides what gets paid for.
@@ -58,7 +64,7 @@ Entry for the **PayPal AI Hackathon** (Devpost). Deadline **Nov 12, 2026, 12:00 
 |---|---|
 | Live web app | **[mandate-web-vo77.onrender.com](https://mandate-web-vo77.onrender.com)** |
 | Live API | [mandate-api-2j9m.onrender.com](https://mandate-api-2j9m.onrender.com/health) (`/health`, `/ready`) |
-| Demo video | `TBD` |
+| Demo video | [Launch video, 1:31](https://github.com/user-attachments/assets/51519db0-fec3-4775-88c2-04c4b5f27266) |
 
 **Contents:** [Problem](#the-problem) · [Solution](#the-solution) · [USP](#usp-we-measure-it) · [Architecture](#architecture-at-a-glance) · [Getting started](#getting-started) · [What works today](#what-works-today) · [Eval protocol](#eval-protocol) · [Contributing](#contributing) · [Security](#security)
 
