@@ -216,6 +216,16 @@ Open http://localhost:5173. The person picker in the corner stands in for sign-i
 | Approval messages | `ZAPIER_APPROVAL_WEBHOOK_URL` and `WEB_APP_URL` ([docs/zapier.md](docs/zapier.md)) |
 | PayPal webhooks | `PAYPAL_WEBHOOK_ID` ([docs/deploy.md](docs/deploy.md)) |
 
+**If purchase requests fail with an LLM error**
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `pnpm install` fails with `No such built-in module: node:sqlite` | Node 20 is active | `nvm use` (reads `.nvmrc`, Node 22) |
+| Request fails although `LLM_API_KEY` is set | `LLM_PROVIDER=anthropic` reads only `ANTHROPIC_API_KEY`, never `LLM_API_KEY` | For an `nvapi-` key set `LLM_PROVIDER=openai-compatible` and `LLM_BASE_URL=https://integrate.api.nvidia.com/v1` |
+| Log shows `"outcome":"PROVIDER_TIMEOUT"` after 60 s | One Mistral Large 4 call on NVIDIA took about 58 s locally, so `LLM_TIMEOUT_MS=60000` is too short | Keep the default `LLM_TIMEOUT_MS=120000` |
+| API logs `Restarting 'src/server.ts'` mid-request and the request never returns | `pnpm dev` watch mode restarted the server during a slow LLM call | Run `pnpm --filter @mandate/api start` (no watch) for end-to-end runs |
+| `EADDRINUSE` on 3000 or 5173 | Another Mandate checkout is still running | Stop it, or set `PORT`, `WEB_ORIGIN`, `WEB_APP_URL` and `apps/web/.env` `VITE_API_URL` to free ports |
+
 **Checks and tools**
 
 ```bash
