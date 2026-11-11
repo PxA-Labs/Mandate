@@ -237,6 +237,28 @@ Empty values, as copied from `.env.example`, count as unset. A `LlmConfigError` 
 | (SDK retries) | `maxRetries: 0`, on the client and per request, so `LlmClient`'s bounds are the only retries |
 | `ANTHROPIC_CUSTOM_HEADERS` | **cannot be disabled through options.** Deployments must not set it (§12) |
 
+### 9.1 Fallback chain (`LLM_PROVIDERS`)
+
+A single free-tier provider can be slow or overloaded: on 2026-11-11 two live requests failed `INTENT_FAILED` after NVIDIA did not answer within the 240 s the server allowed, and the browser had already given up at 120 s. `LLM_PROVIDERS` lists OpenAI-compatible providers to try in order, e.g. `groq,gemini,nvidia`. When it is set, `loadFallbackLlmConfig()` reads it and the single-provider variables above (`LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`, …) are ignored by the API. The eval CLI and the live smoke still use the single-provider config.
+
+| Variable | Default | Rule |
+|---|---|---|
+| `LLM_PROVIDERS` | unset (single provider) | comma-separated lowercase names, 1–5, no duplicates |
+| `LLM_<NAME>_API_KEY` | none (required) | held in a `Secret` |
+| `LLM_<NAME>_MODEL` | none (required) | take the id from `GET <base>/models`, never guess it |
+| `LLM_<NAME>_BASE_URL` | known for `groq`, `gemini`, `nvidia`; required otherwise | same rule as `LLM_BASE_URL` |
+| `LLM_<NAME>_TIMEOUT_MS` | `30000` | the most this provider may take; the **last** provider tried gets whatever is left |
+| `LLM_<NAME>_REASONING_EFFORT` | unset | as `LLM_REASONING_EFFORT` |
+| `LLM_<NAME>_REQUESTS_PER_MINUTE` | `30` | as `LLM_REQUESTS_PER_MINUTE`; set it at or under the provider's free-tier limit |
+| `LLM_FALLBACK_COOLDOWN_MS` | `60000` | how long a provider that just failed is skipped |
+| `LLM_TIMEOUT_MS`, `LLM_MAX_OUTPUT_TOKENS` | as above | shared by the whole chain |
+
+Known base URLs: `groq` → `https://api.groq.com/openai/v1`, `gemini` → `https://generativelanguage.googleapis.com/v1beta/openai`, `nvidia` → `https://integrate.api.nvidia.com/v1`.
+
+**`FallbackAdapter`** (`src/adapters/fallback.ts`) is a `ProviderAdapter`, so `LlmClient`'s deadline, retries, repair and schema validation are unchanged. It hands over to the next provider on any `ProviderError` except `ABORTED` (timeout, 429, 5xx, network, and also 401/400, so one misconfigured provider cannot take the app down; each handover logs `llm.fallback` with the provider name, error code and HTTP status, never a message). A provider that failed is skipped for the cooldown; if every provider is cooling down, all are tried. The answering model is logged as `<name>/<model>`, e.g. `groq/openai/gpt-oss-120b`. Repeating a call is safe: the LLM layer has no tools and moves no money (ADR 0004).
+
+**Budget.** One purchase request makes two structured calls in sequence (intent, then ranking), each bounded by `LLM_TIMEOUT_MS`, and the web client aborts after 120 s (`apps/web/src/api.ts`). Keep `2 × LLM_TIMEOUT_MS` under 120 s, e.g. `LLM_TIMEOUT_MS=55000` with Groq at 15 s and Gemini at 20 s, which leaves NVIDIA about 20 s when both fail, or the full 55 s while both are cooling down.
+
 ## 10. Why the adapter never sends `temperature`, `top_p` or `top_k`
 
 - **Primary source:** Anthropic, *Migrating to API version 2026-10-21*, <https://platform.claude.com/docs/en/api/migration-2026-10-21>: *"In `2026-10-21`, a request that sends `temperature`, `top_p`, or `top_k` returns a 400 error, even at the parameter's default value."* The same page lists `@anthropic-ai/sdk` **1.0.0** as the first TypeScript release that uses `2026-10-21`. We pin 1.3.0.
