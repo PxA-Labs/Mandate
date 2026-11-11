@@ -64,6 +64,11 @@ services:
         value: low
       - key: LLM_API_KEY
         sync: false
+      # Optional Gemini fallback (docs/llm-layer.md section 9). Off while the key is unset.
+      - key: LLM_FALLBACK_API_KEY
+        sync: false
+      - key: LLM_FALLBACK_MODEL
+        sync: false
       # Abuse protection (#62, docs/deploy.md "Abuse protection"). The kill switch is set in the dashboard only, so
       # a Blueprint sync never overwrites it: unset or "true" is on, "false" turns off the LLM and payment routes.
       - key: PURCHASES_ENABLED

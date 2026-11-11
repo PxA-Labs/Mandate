@@ -29,14 +29,32 @@ export class Secret {
   }
 }
 
+export type ReasoningEffort = 'low' | 'medium' | 'high';
+
+/**
+ * A second OpenAI-compatible provider (Gemini by default) that answers when the primary fails at the
+ * transport level. Never used for refusals or invalid output. See adapters/fallback.ts.
+ */
+export interface FallbackLlmConfig {
+  baseUrl: string;
+  model: string;
+  apiKey: Secret;
+  requestsPerMinute: number;
+  reasoningEffort?: ReasoningEffort;
+  /** Milliseconds of each call's deadline held back from the primary, so the fallback has time to answer. */
+  reserveMs: number;
+  /** After a primary failure, calls skip the primary for this long. */
+  cooldownMs: number;
+}
+
 interface CommonLlmConfig {
   model: string;
   apiKey: Secret;
   timeoutMs: number;
   maxOutputTokens: number;
+  /** Set only when LLM_FALLBACK_API_KEY is. */
+  fallback?: FallbackLlmConfig;
 }
-
-export type ReasoningEffort = 'low' | 'medium' | 'high';
 
 /** Which provider answers, and how to reach it. Every field comes from loadLlmConfig. */
 export type LlmConfig =
@@ -106,8 +124,38 @@ const CompatibleEnvSchema = z.object({
   LLM_REQUESTS_PER_MINUTE: unsetIfEmpty(z.coerce.number().int().min(1).max(1_000).default(30)),
 });
 
+/** Gemini's OpenAI-compatible endpoint. https://ai.google.dev/gemini-api/docs/openai */
+export const GEMINI_OPENAI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
+
+const FallbackEnvSchema = z.object({
+  LLM_FALLBACK_BASE_URL: unsetIfEmpty(BaseUrlSchema.default(GEMINI_OPENAI_BASE_URL)),
+  LLM_FALLBACK_MODEL: unsetIfEmpty(ModelSchema),
+  LLM_FALLBACK_API_KEY: unsetIfEmpty(z.string().min(1)),
+  LLM_FALLBACK_REASONING_EFFORT: unsetIfEmpty(z.enum(['low', 'medium', 'high']).optional()),
+  LLM_FALLBACK_REQUESTS_PER_MINUTE: unsetIfEmpty(z.coerce.number().int().min(1).max(1_000).default(10)),
+  LLM_FALLBACK_RESERVE_MS: unsetIfEmpty(z.coerce.number().int().min(1_000).max(120_000).default(30_000)),
+  LLM_FALLBACK_COOLDOWN_MS: unsetIfEmpty(z.coerce.number().int().min(0).max(3_600_000).default(60_000)),
+});
+
 function variablesOf(error: z.ZodError): string[] {
   return [...new Set(error.issues.map((issue) => String(issue.path[0] ?? 'env')))].sort();
+}
+
+/** Off unless LLM_FALLBACK_API_KEY is set; then LLM_FALLBACK_MODEL is required too. */
+function loadFallback(env: Readonly<Record<string, string | undefined>>): FallbackLlmConfig | undefined {
+  if (emptyAsUnset(env['LLM_FALLBACK_API_KEY']) === undefined) return undefined;
+  const parsed = FallbackEnvSchema.safeParse(env);
+  if (!parsed.success) throw new LlmConfigError(variablesOf(parsed.error));
+  const data = parsed.data;
+  return {
+    baseUrl: data.LLM_FALLBACK_BASE_URL,
+    model: data.LLM_FALLBACK_MODEL,
+    apiKey: new Secret(data.LLM_FALLBACK_API_KEY),
+    requestsPerMinute: data.LLM_FALLBACK_REQUESTS_PER_MINUTE,
+    reserveMs: data.LLM_FALLBACK_RESERVE_MS,
+    cooldownMs: data.LLM_FALLBACK_COOLDOWN_MS,
+    ...(data.LLM_FALLBACK_REASONING_EFFORT === undefined ? {} : { reasoningEffort: data.LLM_FALLBACK_REASONING_EFFORT }),
+  };
 }
 
 /**
@@ -124,21 +172,39 @@ export function loadLlmConfig(env: Readonly<Record<string, string | undefined>> 
     throw new LlmConfigError([...new Set([...variablesOf(provider.error), ...(rest.success ? [] : variablesOf(rest.error))])].sort());
   }
 
+  let fallback: FallbackLlmConfig | undefined;
+  let fallbackProblems: string[] = [];
+  try {
+    fallback = loadFallback(env);
+  } catch (error) {
+    if (!(error instanceof LlmConfigError)) throw error;
+    fallbackProblems = [...error.variables];
+  }
+  const withFallback = fallback === undefined ? {} : { fallback };
+  // Report primary and fallback problems together.
+  const fail = (primary: z.ZodError | undefined): never => {
+    throw new LlmConfigError([...new Set([...(primary ? variablesOf(primary) : []), ...fallbackProblems])].sort());
+  };
+
   if (provider.data.LLM_PROVIDER === 'anthropic') {
     const parsed = AnthropicEnvSchema.safeParse(env);
-    if (!parsed.success) throw new LlmConfigError(variablesOf(parsed.error));
+    if (!parsed.success) return fail(parsed.error);
+    if (fallbackProblems.length > 0) return fail(undefined);
     return {
       provider: 'anthropic',
       model: parsed.data.LLM_MODEL,
       apiKey: new Secret(parsed.data.ANTHROPIC_API_KEY),
       timeoutMs: parsed.data.LLM_TIMEOUT_MS,
       maxOutputTokens: parsed.data.LLM_MAX_OUTPUT_TOKENS,
+      ...withFallback,
     };
   }
 
   const parsed = CompatibleEnvSchema.safeParse(env);
-  if (!parsed.success) throw new LlmConfigError(variablesOf(parsed.error));
+  if (!parsed.success) return fail(parsed.error);
+  if (fallbackProblems.length > 0) return fail(undefined);
   return {
+    ...withFallback,
     provider: 'openai-compatible',
     baseUrl: parsed.data.LLM_BASE_URL,
     model: parsed.data.LLM_MODEL,

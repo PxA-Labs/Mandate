@@ -212,6 +212,7 @@ Open http://localhost:5173. The person picker in the corner stands in for sign-i
 |---|---|
 | Health, mandate setup, dashboard | `DATABASE_URL` (already set for Docker in `.env.example`) |
 | Purchase requests | `LLM_PROVIDER=openai-compatible`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` (an NVIDIA API key from build.nvidia.com) and `LLM_REASONING_EFFORT=low` (see `.env.example`), plus `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` from a **sandbox** app at developer.paypal.com |
+| LLM fallback (optional) | `LLM_FALLBACK_API_KEY` (a Gemini key from aistudio.google.com) and `LLM_FALLBACK_MODEL`. Answers when NVIDIA times out, is rate-limited, down or rejects the key; never on refusals ([docs/llm-layer.md](docs/llm-layer.md) section 9) |
 | Browser access to the API | `WEB_ORIGIN=http://localhost:5173` (already in `.env.example`) |
 | Approval messages | `ZAPIER_APPROVAL_WEBHOOK_URL` and `WEB_APP_URL` ([docs/zapier.md](docs/zapier.md)) |
 | PayPal webhooks | `PAYPAL_WEBHOOK_ID` ([docs/deploy.md](docs/deploy.md)) |

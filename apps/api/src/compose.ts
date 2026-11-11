@@ -1,4 +1,4 @@
-import { createAdapter, LlmClient, LlmConfigError, LlmIntentParser, LlmRanker, loadLlmConfig, type Logger, type ProviderAdapter } from '@mandate/llm';
+import { createServingAdapter, LlmClient, LlmConfigError, LlmIntentParser, LlmRanker, loadLlmConfig, type Logger, type ProviderAdapter } from '@mandate/llm';
 import type { FastifyBaseLogger } from 'fastify';
 import type { Db } from './db/db.js';
 import { loadZapierConfig, ZapierApprovalNotifier, ZapierConfigError } from './modules/approvals/zapier.js';
@@ -63,11 +63,12 @@ export function compose(options: ComposeOptions): Composition {
   let client: LlmClient | undefined;
   try {
     const config = loadLlmConfig(env);
+    const logger = llmLogger(log);
     client = new LlmClient({
-      adapter: options.llmAdapter ?? createAdapter(config),
+      adapter: options.llmAdapter ?? createServingAdapter(config, logger),
       timeoutMs: config.timeoutMs,
       maxOutputTokens: config.maxOutputTokens,
-      logger: llmLogger(log),
+      logger,
     });
   } catch (error) {
     if (!(error instanceof LlmConfigError)) throw error;
