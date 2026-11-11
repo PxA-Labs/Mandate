@@ -10,6 +10,7 @@ export {
 } from './adapters/anthropic.js';
 export * from './adapters/create.js';
 export * from './adapters/fake.js';
+export * from './adapters/fallback.js';
 export { trimTrailingSlashes } from './adapters/http.js';
 export { type FetchLike as LlmFetch, OpenAICompatibleAdapter, type OpenAICompatibleAdapterOptions } from './adapters/openai-compatible.js';
 export * from './client.js';

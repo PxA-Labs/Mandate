@@ -64,6 +64,32 @@ services:
         value: low
       - key: LLM_API_KEY
         sync: false
+      # Optional fallback chain (docs/llm-layer.md section 9.1), set in the dashboard: unset LLM_PROVIDERS keeps the
+      # single provider above. sync: false so a Blueprint sync never switches a running deployment by itself.
+      - key: LLM_PROVIDERS
+        sync: false
+      - key: LLM_TIMEOUT_MS
+        sync: false
+      - key: LLM_GROQ_API_KEY
+        sync: false
+      - key: LLM_GROQ_MODEL
+        sync: false
+      - key: LLM_GROQ_TIMEOUT_MS
+        sync: false
+      - key: LLM_GEMINI_API_KEY
+        sync: false
+      - key: LLM_GEMINI_MODEL
+        sync: false
+      - key: LLM_GEMINI_TIMEOUT_MS
+        sync: false
+      - key: LLM_GEMINI_REQUESTS_PER_MINUTE
+        sync: false
+      - key: LLM_NVIDIA_API_KEY
+        sync: false
+      - key: LLM_NVIDIA_MODEL
+        sync: false
+      - key: LLM_NVIDIA_REASONING_EFFORT
+        sync: false
       # Abuse protection (#62, docs/deploy.md "Abuse protection"). The kill switch is set in the dashboard only, so
       # a Blueprint sync never overwrites it: unset or "true" is on, "false" turns off the LLM and payment routes.
       - key: PURCHASES_ENABLED

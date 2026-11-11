@@ -93,6 +93,19 @@ describe('compose', () => {
     expect(result.disabled).toEqual([]);
   });
 
+  it('wires purchases through the fallback chain when LLM_PROVIDERS is set', () => {
+    const chain = { LLM_PROVIDERS: 'groq,gemini', LLM_GROQ_API_KEY: 'test-key-not-real', LLM_GROQ_MODEL: 'g', LLM_GEMINI_API_KEY: 'test-key-not-real', LLM_GEMINI_MODEL: 'm' };
+    // No ANTHROPIC_API_KEY: the chain alone must satisfy the LLM configuration.
+    const result = compose({ env: { ...ENV, ANTHROPIC_API_KEY: undefined, ...chain }, db, log });
+    expect(result.purchases).toBeDefined();
+  });
+
+  it('names a half-configured fallback chain by variable only', () => {
+    const result = compose({ env: { ...ENV, LLM_PROVIDERS: 'groq', LLM_GROQ_MODEL: 'g' }, db, log });
+    expect(result.purchases).toBeUndefined();
+    expect(result.disabled[0]).toEqual({ feature: 'purchases', missing: ['LLM_GROQ_API_KEY'] });
+  });
+
   it('rethrows errors that are not configuration errors', () => {
     const env = new Proxy(
       {},

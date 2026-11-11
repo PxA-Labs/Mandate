@@ -149,3 +149,92 @@ export function loadLlmConfig(env: Readonly<Record<string, string | undefined>> 
     ...(parsed.data.LLM_REASONING_EFFORT === undefined ? {} : { reasoningEffort: parsed.data.LLM_REASONING_EFFORT }),
   };
 }
+
+/** One provider in the fallback chain: an OpenAI-compatible endpoint with its own share of the deadline. */
+export type FallbackLink = Extract<LlmConfig, { provider: 'openai-compatible' }> & {
+  /** Lowercase name from LLM_PROVIDERS, e.g. "groq". Prefixes the model in logs. */
+  name: string;
+};
+
+export interface FallbackLlmConfig {
+  /** Tried in order. Every link but the last gets at most its own timeoutMs; the last gets what is left. */
+  links: readonly FallbackLink[];
+  /** Overall deadline for one structured call, every provider and retry included (LLM_TIMEOUT_MS). */
+  timeoutMs: number;
+  maxOutputTokens: number;
+  /** How long a provider that just failed is skipped (LLM_FALLBACK_COOLDOWN_MS). */
+  cooldownMs: number;
+}
+
+/** Base URLs for well-known names, so only the key and model need setting. LLM_<NAME>_BASE_URL overrides. */
+export const KNOWN_BASE_URLS: Readonly<Record<string, string>> = {
+  groq: 'https://api.groq.com/openai/v1',
+  gemini: 'https://generativelanguage.googleapis.com/v1beta/openai',
+  nvidia: 'https://integrate.api.nvidia.com/v1',
+};
+
+const ProviderNameSchema = z.string().regex(/^[a-z][a-z0-9]{0,19}$/);
+
+const FallbackEnvSchema = z.object({
+  ...CommonSchema,
+  LLM_PROVIDERS: z
+    .string()
+    .transform((value) => value.split(',').map((name) => name.trim().toLowerCase()).filter((name) => name !== ''))
+    .pipe(z.array(ProviderNameSchema).min(1).max(5).refine((names) => new Set(names).size === names.length)),
+  LLM_FALLBACK_COOLDOWN_MS: unsetIfEmpty(z.coerce.number().int().min(0).max(600_000).default(60_000)),
+});
+
+const LinkEnvSchema = z.object({
+  BASE_URL: BaseUrlSchema,
+  MODEL: unsetIfEmpty(ModelSchema),
+  API_KEY: unsetIfEmpty(z.string().min(1)),
+  TIMEOUT_MS: unsetIfEmpty(z.coerce.number().int().min(1_000).max(300_000).default(30_000)),
+  REASONING_EFFORT: unsetIfEmpty(z.enum(['low', 'medium', 'high']).optional()),
+  REQUESTS_PER_MINUTE: unsetIfEmpty(z.coerce.number().int().min(1).max(1_000).default(30)),
+});
+
+/**
+ * The fallback chain (LLM_PROVIDERS=groq,gemini,nvidia), or undefined when LLM_PROVIDERS is unset and the
+ * single-provider config applies. Each name reads LLM_<NAME>_API_KEY, LLM_<NAME>_MODEL and optionally
+ * LLM_<NAME>_BASE_URL, _TIMEOUT_MS, _REASONING_EFFORT and _REQUESTS_PER_MINUTE. Every link is
+ * OpenAI-compatible. Errors name variables only, never values.
+ */
+export function loadFallbackLlmConfig(env: Readonly<Record<string, string | undefined>> = process.env): FallbackLlmConfig | undefined {
+  if (emptyAsUnset(env['LLM_PROVIDERS']) === undefined) return undefined;
+  const parsed = FallbackEnvSchema.safeParse(env);
+  if (!parsed.success) throw new LlmConfigError(variablesOf(parsed.error));
+
+  const invalid: string[] = [];
+  const links: FallbackLink[] = [];
+  for (const name of parsed.data.LLM_PROVIDERS) {
+    const prefix = `LLM_${name.toUpperCase()}_`;
+    const linkEnv: Record<string, string | undefined> = Object.fromEntries(
+      Object.keys(LinkEnvSchema.shape).map((key) => [key, env[`${prefix}${key}`]]),
+    );
+    const baseUrl = linkEnv['BASE_URL'];
+    linkEnv['BASE_URL'] = baseUrl === undefined || baseUrl === '' ? KNOWN_BASE_URLS[name] : baseUrl;
+    const link = LinkEnvSchema.safeParse(linkEnv);
+    if (!link.success) {
+      invalid.push(...variablesOf(link.error).map((key) => `${prefix}${key}`));
+      continue;
+    }
+    links.push({
+      name,
+      provider: 'openai-compatible',
+      baseUrl: link.data.BASE_URL,
+      model: link.data.MODEL,
+      apiKey: new Secret(link.data.API_KEY),
+      timeoutMs: link.data.TIMEOUT_MS,
+      maxOutputTokens: parsed.data.LLM_MAX_OUTPUT_TOKENS,
+      requestsPerMinute: link.data.REQUESTS_PER_MINUTE,
+      ...(link.data.REASONING_EFFORT === undefined ? {} : { reasoningEffort: link.data.REASONING_EFFORT }),
+    });
+  }
+  if (invalid.length > 0) throw new LlmConfigError([...new Set(invalid)].sort());
+  return {
+    links,
+    timeoutMs: parsed.data.LLM_TIMEOUT_MS,
+    maxOutputTokens: parsed.data.LLM_MAX_OUTPUT_TOKENS,
+    cooldownMs: parsed.data.LLM_FALLBACK_COOLDOWN_MS,
+  };
+}

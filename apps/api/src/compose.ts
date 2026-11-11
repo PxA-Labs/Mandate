@@ -1,4 +1,15 @@
-import { createAdapter, LlmClient, LlmConfigError, LlmIntentParser, LlmRanker, loadLlmConfig, type Logger, type ProviderAdapter } from '@mandate/llm';
+import {
+  createAdapter,
+  FallbackAdapter,
+  LlmClient,
+  LlmConfigError,
+  LlmIntentParser,
+  LlmRanker,
+  loadFallbackLlmConfig,
+  loadLlmConfig,
+  type Logger,
+  type ProviderAdapter,
+} from '@mandate/llm';
 import type { FastifyBaseLogger } from 'fastify';
 import type { Db } from './db/db.js';
 import { loadZapierConfig, ZapierApprovalNotifier, ZapierConfigError } from './modules/approvals/zapier.js';
@@ -62,9 +73,10 @@ export function compose(options: ComposeOptions): Composition {
 
   let client: LlmClient | undefined;
   try {
-    const config = loadLlmConfig(env);
+    // LLM_PROVIDERS (a fallback chain, e.g. groq,gemini,nvidia) wins over the single LLM_PROVIDER setup.
+    const config = loadFallbackLlmConfig(env) ?? loadLlmConfig(env);
     client = new LlmClient({
-      adapter: options.llmAdapter ?? createAdapter(config),
+      adapter: options.llmAdapter ?? ('links' in config ? FallbackAdapter.fromConfig(config, llmLogger(log)) : createAdapter(config)),
       timeoutMs: config.timeoutMs,
       maxOutputTokens: config.maxOutputTokens,
       logger: llmLogger(log),
