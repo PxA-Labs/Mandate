@@ -349,6 +349,7 @@ Designed before the results exist, so we cannot tune the protocol to flatter the
 | Configurations | (a) naive, (b) prompt-hardened, (c) Mandate — identical suites |
 | Metrics | Task success rate · attack success rate per configuration · false-block rate on the benign set · p50/p95 end-to-end latency · LLM cost per purchase |
 | Reporting | Whatever we measure, including failures and regressions. The synthetic-listing limitation is stated explicitly |
+| Model scope | Eval numbers are for the primary model (Mistral Large 4). The optional fallback model (Gemini, [docs/llm-layer.md](docs/llm-layer.md) section 9) is **not evaluated**, and evals never use it |
 
 ## Risks
 

@@ -26,6 +26,8 @@ Render adds a random suffix (`mandate-api-xxxx.onrender.com`) when a service nam
    | `DATABASE_URL` | mandate-api | Set by Render from `mandate-db` | Everything |
    | `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | mandate-api | Sandbox app credentials (developer.paypal.com → Apps & Credentials → **Sandbox**) | Purchases |
    | `LLM_API_KEY` | mandate-api | NVIDIA API key from build.nvidia.com. The other `LLM_*` values are set in `render.yaml` ([llm-layer.md](llm-layer.md) section 9). Set the key only once abuse protection is deployed | Purchases |
+   | `LLM_FALLBACK_API_KEY` | mandate-api | Optional Gemini fallback ([llm-layer.md](llm-layer.md) section 9). Set it **in the same save** as `LLM_FALLBACK_MODEL`: one without the other is a config error and disables purchases. Use a key from a project without billing, and read the "Before turning the fallback on" notes first | Fallback |
+   | `LLM_FALLBACK_MODEL` | mandate-api | `gemini-3.5-flash-lite` (verified locally; take the id from `GET <base>/models`). Not secret | Fallback |
    | `LLM_TIMEOUT_MS` | mandate-api | Default `120000`. Ours is `240000`: one NVIDIA call ran past 120 s and the request ended `INTENT_FAILED` (see [Gate 1 evidence](#gate-1-evidence)) | Optional |
    | `PURCHASES_ENABLED` | mandate-api | Unset or `true`; `false` is the kill switch (see below) | Optional |
    | `TRUST_PROXY`, `LLM_DAILY_REQUEST_CAP`, `LLM_DAILY_PER_IP_CAP`, `LLM_MAX_CONCURRENT` | mandate-api | Set in `render.yaml`; see [Abuse protection](#abuse-protection) | Client IP, LLM limits |
