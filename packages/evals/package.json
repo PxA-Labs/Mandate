@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.3.0",
-    "@electric-sql/pglite": "0.5.12",
+    "@electric-sql/pglite": "0.5.14",
     "@mandate/api": "workspace:*",
     "@mandate/llm": "workspace:*",
     "@mandate/policy": "workspace:*",
