@@ -4,19 +4,21 @@ import type { ProviderAdapter, ProviderRequest, ProviderResponse } from '../prov
 import { type Clock, systemClock } from '../time.js';
 
 /**
- * Transport failures that hand the call to the fallback. A bad key (PROVIDER_AUTH) and a request the
- * primary rejects (PROVIDER_BAD_REQUEST, e.g. an unsupported field) are included: the other provider
- * may well accept it. Not included: ABORTED (the caller gave up) and CONTEXT_TOO_LARGE (the same
- * prompt would not fit elsewhere either). Refusals and invalid output are not adapter errors at all,
- * so they never reach this class: the model is never switched to get a different answer
- * (docs/llm-layer.md, decision 9).
+ * Failures of the primary provider itself (down, slow, throttled, or rejecting our key), which hand
+ * the call to the fallback. Deliberately not included:
+ * - PROVIDER_BAD_REQUEST: a 400 is usually about this request, not the provider. Request text is
+ *   user-controlled, so one input the primary rejects (a content filter, say) would otherwise flip
+ *   every user to the fallback for the cooldown: a silent model switch (decision 9). A 400 caused by
+ *   our own bug must also fail loudly, not be hidden.
+ * - ABORTED (the caller gave up) and CONTEXT_TOO_LARGE (the same prompt would not fit elsewhere).
+ * Refusals and invalid output are not adapter errors at all, so they never reach this class: the
+ * model is never switched to get a different answer (docs/llm-layer.md, decision 9).
  */
 export const FALLBACK_CODES: ReadonlySet<ProviderErrorCode> = new Set([
   'PROVIDER_TIMEOUT',
   'PROVIDER_RATE_LIMITED',
   'PROVIDER_UNAVAILABLE',
   'PROVIDER_AUTH',
-  'PROVIDER_BAD_REQUEST',
 ]);
 
 export interface FallbackAdapterOptions {
@@ -33,8 +35,9 @@ export interface FallbackAdapterOptions {
 /**
  * Tries the primary provider, and on a transport failure sends the same request to the fallback.
  * Transport only, like every adapter: no parsing, validation or retries. LlmClient's retries and
- * deadline still wrap the whole call. Every hand-over is logged, and ProviderResponse.model names the
- * model that actually answered, so the audit trail never hides a switch.
+ * deadline still wrap the whole call. Every hand-over is logged (llm.fallback), and
+ * ProviderResponse.model names the model that actually answered (llm.result), so the logs never hide a
+ * switch. The purchase's audit entry does not record the model yet.
  */
 export class FallbackAdapter implements ProviderAdapter {
   readonly provider: string;

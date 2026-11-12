@@ -55,9 +55,38 @@ describe('FallbackAdapter', () => {
     expect(logger.warnings[0]?.fields).toMatchObject({ reason: 'primary_failed', code, primaryModel: 'nvidia-model', fallbackModel: 'gemini-model' });
   });
 
-  it.each<ProviderErrorCode>(['ABORTED', 'CONTEXT_TOO_LARGE'])('does not fall back on %s', async (code) => {
+  it.each<ProviderErrorCode>(['PROVIDER_BAD_REQUEST', 'ABORTED', 'CONTEXT_TOO_LARGE'])('does not fall back on %s', async (code) => {
     const { adapter, fallback } = setup([{ kind: 'error', code }], [FakeProvider.json({ ok: 1 })]);
     await expect(adapter.complete(request())).rejects.toMatchObject({ code });
+    expect(fallback.requests).toHaveLength(0);
+  });
+
+  it('a 400 on one request neither falls back nor starts the cooldown for the next caller', async () => {
+    const { adapter, primary, fallback } = setup(
+      [{ kind: 'error', code: 'PROVIDER_BAD_REQUEST' }, FakeProvider.json({ ok: 'next caller' })],
+      [FakeProvider.json({ ok: 1 })],
+      { cooldownMs: 60_000 },
+    );
+    await expect(adapter.complete(request())).rejects.toMatchObject({ code: 'PROVIDER_BAD_REQUEST' });
+    expect((await adapter.complete(request())).model).toBe('nvidia-model');
+    expect(primary.requests).toHaveLength(2);
+    expect(fallback.requests).toHaveLength(0);
+  });
+
+  it('times out without calling the fallback when the primary used up all the time', async () => {
+    let now = 0;
+    const primary = {
+      provider: 'p',
+      model: 'nvidia-model',
+      complete(r: ProviderRequest) {
+        now += r.timeoutMs + 40_000; // overran its slice and the reserve, e.g. an adapter ignoring its timeout
+        return Promise.reject(new ProviderError('PROVIDER_UNAVAILABLE'));
+      },
+    };
+    const fallback = new FakeProvider([FakeProvider.json({ ok: 1 })], { model: 'gemini-model' });
+    const adapter = new FallbackAdapter({ primary, fallback, reserveMs: 30_000, cooldownMs: 0, clock: { now: () => now } });
+
+    await expect(adapter.complete(request({ timeoutMs: 120_000 }))).rejects.toMatchObject({ code: 'PROVIDER_TIMEOUT' });
     expect(fallback.requests).toHaveLength(0);
   });
 
