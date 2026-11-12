@@ -1,4 +1,4 @@
-import { ApiError } from './api';
+import { ApiError, type PurchaseView } from './api';
 
 /** What each request status means to the person who asked, in plain words. */
 export const STATUS_TEXT: Record<string, string> = {
@@ -36,6 +36,25 @@ export function failureText(code: string | undefined | null): string {
 }
 
 export const OUTCOME_LABEL: Record<string, string> = { ALLOW: 'Allowed', NEEDS_APPROVAL: 'Needs approval', DENY: 'Denied' };
+
+export type StampTone = 'allow' | 'review' | 'deny';
+const OUTCOME_TONE: Record<string, StampTone> = { ALLOW: 'allow', NEEDS_APPROVAL: 'review', DENY: 'deny' };
+const APPROVER_STAMP: Record<string, { label: string; tone: StampTone }> = {
+  PENDING_APPROVAL: { label: 'Needs approval', tone: 'review' },
+  REJECTED: { label: 'Rejected', tone: 'deny' },
+  EXPIRED: { label: 'Expired', tone: 'deny' },
+};
+
+/**
+ * The stamp on the slip. A cart that needed a person shows what the approver did: once the request has left
+ * PENDING_APPROVAL other than by a rejection or expiry, it was approved (the policy decision itself never changes).
+ */
+export function stampFor(purchase: PurchaseView): { label: string; tone: StampTone } | undefined {
+  const outcome = purchase.decision?.outcome;
+  if (!outcome) return undefined;
+  if (outcome === 'NEEDS_APPROVAL') return APPROVER_STAMP[purchase.status] ?? { label: 'Approved', tone: 'allow' };
+  return { label: OUTCOME_LABEL[outcome] ?? outcome, tone: OUTCOME_TONE[outcome] ?? 'review' };
+}
 
 /** An error a person can act on. Never shows response bodies, which could echo request text. */
 export function errorText(error: unknown): string {

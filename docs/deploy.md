@@ -164,3 +164,31 @@ From Render's free-plan docs (render.com/docs/free, read 2026-11-07; check befor
 | One free Postgres per workspace; 750 free instance hours per month | Don't create a second free database in the same workspace |
 | **No authentication yet** (#10 follow-up) | The API is public, and the demo user ids are in the repo, so anyone with the URL can edit the demo mandate or submit sandbox purchases. Sandbox only: no real money moves. The [abuse protection](#abuse-protection) limits bound the LLM quota and the request rate, but do not stop someone editing the demo mandate |
 | Region `singapore` | Close to the team. Judges are mostly US-based; latency is acceptable for a demo |
+
+## Judging period checklist (Dec 1–15)
+
+Judging runs until 2026-12-15. Several free-plan limits fall inside that window. Work through this list on the dates given, and run `pnpm smoke:deployed <api-url> --web <web-url>` after every change.
+
+| When | Do this | Why |
+|---|---|---|
+| By **2026-11-24** | Decide how approval emails are sent after the Zapier Pro trial ends: keep a paid Zapier plan until 2026-12-15, or state the limit in the Devpost testing instructions | After the trial the Zap may stop running. Free and Trial plans allow 5 emails per account per day ([zapier.md](zapier.md)) |
+| **2026-12-01** | Check the NVIDIA key's expiry date and the account's rate limit on build.nvidia.com. Run one purchase through the web app | NVIDIA's key-expiry policy and rate limit are not in any official page we found (`VERIFY`) |
+| By **2026-12-05** | Upgrade `mandate-db` to a paid plan (steps below) | The free database was created 2026-11-07 and expires about **2026-12-07** |
+| Every morning, Dec 1–15 | Smoke check, then the Zap history in Zapier and the Render dashboard for emails or warnings | The free services and the Zap fail silently |
+
+**Upgrading `mandate-db`.** Render's docs say a free database can be upgraded in place to any paid plan, with no redeploy or migration. Upgrading removes the 30-day expiry and the 1 GB storage cap. After expiry there is a 14-day grace period in which upgrading still works; after that the database and its data are deleted, which for ours is about 2026-12-21.
+
+1. Look up the smallest paid Postgres plan's exact name and price on render.com/pricing (`VERIFY`; names have changed over time).
+2. In a PR, change `plan: free` on `mandate-db` in [`render.yaml`](../render.yaml) to that plan name. Changing the file, not only the dashboard, keeps the next Blueprint sync from setting the database back to `free`.
+3. After the merge, open the Blueprint page → **Manual sync**. Check that `mandate-db` shows the paid plan and no expiry notice, then run the smoke check.
+
+**What a judge sees if something fails**
+
+| Failure | What the judge sees | Fix |
+|---|---|---|
+| Database expired (from about 2026-12-07) | Every screen shows "The API returned an error (500)" or similar. `/ready` returns `503` | Upgrade as above, within the 14-day grace period |
+| Zap stopped, or the daily email limit reached | A large cart says "Sent to the approver" but no email arrives. There is no other way to approve it today, so after 24 hours the request is `EXPIRED` and its hold is released | Restore the Zap. The audit shows `approval.notify_failed` only if the hook refuses the call; a hook that accepts calls while the Zap is off still logs `approval.notified` (`VERIFY`), so check the Zap history |
+| NVIDIA key expired or revoked | Every request ends "The request could not be read. Name the products and quantities you need." That message blames the request, not the key | Create a new key on build.nvidia.com, set `LLM_API_KEY` on mandate-api, then **Save, rebuild and deploy** |
+| NVIDIA rate limit | Requests take longer while the client waits out `Retry-After`; if a call runs out of attempts, the request ends with the same message as above. Users report about 40 requests/minute on free accounts; our throttle is 30/minute (`LLM_REQUESTS_PER_MINUTE`) | Wait. Each purchase makes 2 model calls |
+| Free instance asleep (15 minutes idle) | The first load takes about a minute (53 s measured on 2026-11-08), and each purchase request takes another 55–143 s for the model | Open `/health` before a demo, or move `mandate-api` to a paid instance (price: `VERIFY`) |
+| Daily caps reached: 100 LLM requests per day overall, 20 per client, 2 at once | The web app shows "The API returned an error (429)" or "(503)", which does not say a cap was hit. The caps reset at 00:00 UTC (05:30 IST); the per-client count also resets when the service restarts | Wait for the reset, or raise the value in `render.yaml` (a dashboard-only change is overwritten by the next Blueprint sync) |

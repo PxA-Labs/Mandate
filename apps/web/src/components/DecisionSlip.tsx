@@ -1,5 +1,5 @@
 import type { PurchaseView, Summary } from '../api';
-import { failureText, OUTCOME_LABEL, STATUS_TEXT } from '../copy';
+import { failureText, STATUS_TEXT, stampFor } from '../copy';
 import { formatMoney } from '../money';
 
 interface Props {
@@ -9,8 +9,6 @@ interface Props {
   checking?: boolean;
 }
 
-const STAMP_CLASS: Record<string, string> = { ALLOW: 'stamp--allow', NEEDS_APPROVAL: 'stamp--review', DENY: 'stamp--deny' };
-
 /**
  * The purchase slip: what was asked, what the agent priced, and the mandate's decision stamped across it.
  * Every reason the policy engine gave is listed; titles and messages render as text only.
@@ -19,14 +17,15 @@ export function DecisionSlip({ purchase, summary, onCheckPayment, checking = fal
   const { decision, cart, order } = purchase;
   const headline = purchase.status === 'FAILED' ? failureText(purchase.failureCode) : (STATUS_TEXT[purchase.status] ?? purchase.status);
   const currency = cart?.currency ?? decision?.evaluatedTotal.currency ?? summary?.currency ?? 'USD';
+  const stamp = stampFor(purchase);
 
   return (
     <article className="slip" aria-live="polite">
       <header className="slip__head">
         <p className="slip__status">{headline}</p>
-        {decision && (
-          <p className={`stamp ${STAMP_CLASS[decision.outcome] ?? ''}`} aria-label={`Decision: ${OUTCOME_LABEL[decision.outcome] ?? decision.outcome}`}>
-            {OUTCOME_LABEL[decision.outcome] ?? decision.outcome}
+        {stamp && (
+          <p className={`stamp stamp--${stamp.tone}`} aria-label={`Decision: ${stamp.label}`}>
+            {stamp.label}
           </p>
         )}
       </header>
@@ -95,7 +94,7 @@ export function DecisionSlip({ purchase, summary, onCheckPayment, checking = fal
       {order && (
         <section className="slip__section slip__pay">
           <p>
-            PayPal order <code>{order.id}</code>: {order.providerStatus ?? order.state}
+            Order <code>{order.id}</code>: {order.providerStatus ?? order.state}
           </p>
           <div className="actions">
             {order.approveUrl && (
