@@ -12,7 +12,7 @@
     "smoke:live": "vitest run --config vitest.smoke.config.ts --reporter=verbose smoke/live.smoke.test.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "1.3.0",
+    "@anthropic-ai/sdk": "1.6.0",
     "@mandate/shared": "workspace:*",
     "zod": "4.6.7"
   }
