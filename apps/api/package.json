@@ -15,17 +15,17 @@
     "smoke:deployed": "node --import ./scripts/resolve-ts.ts scripts/smoke-deployed.ts"
   },
   "dependencies": {
-    "@fastify/cors": "11.3.1",
+    "@fastify/cors": "11.4.1",
     "@mandate/llm": "workspace:*",
     "@mandate/payments": "workspace:*",
     "@mandate/policy": "workspace:*",
     "@mandate/shared": "workspace:*",
-    "fastify": "5.12.7",
+    "fastify": "5.12.8",
     "pg": "8.23.1",
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.12",
+    "@electric-sql/pglite": "0.5.15",
     "@types/pg": "8.23.1"
   }
 }
